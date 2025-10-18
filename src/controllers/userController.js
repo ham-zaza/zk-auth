@@ -5,7 +5,7 @@ export const registerUser = async (req, res) => {
     console.log("Request body:", req.body);
 
     try {
-        const { username, publicKey } = req.body;
+        const { username, publicKey, publicKeyZ } = req.body;
 
         if (!username || !publicKey) {
             return res.status(400).json({ message: "Username and publicKey are required" });

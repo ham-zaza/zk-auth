@@ -1,21 +1,27 @@
+// server.js
 import express from "express";
 import dotenv from "dotenv";
 import { connectDB } from "./src/config/db.js";
 import userRoutes from "./src/routes/userRoutes.js";
+import authRoutes from './src/routes/authRoutes.js';
 
+// 🔥 Load environment variables FIRST
 dotenv.config();
+
+// ✅ Create Express app IMMEDIATELY after imports
 const app = express();
 
-// Middleware
+// 🧰 Middleware
 app.use(express.json());
 
-// Connect DB
+// 🌐 Connect to MongoDB
 connectDB();
 
-// Routes
-app.use("/api/users", userRoutes); // ✅ note: /api/users, not just /api
+// 🛣️ Register ALL routes AFTER app is created
+app.use("/api/users", userRoutes);
+app.use("/api/auth", authRoutes); // ✅ Now SAFE!
 
-// ✅ DEBUG route to test server
+// 🧪 Debug routes (keep these!)
 app.get("/debug", (req, res) => {
     res.json({
         message: "Debug route works!",
@@ -23,11 +29,11 @@ app.get("/debug", (req, res) => {
     });
 });
 
-// ✅ Root route
 app.get("/", (req, res) => {
     res.send("ZK-Auth backend running");
 });
 
+// ▶️ Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
