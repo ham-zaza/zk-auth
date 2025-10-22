@@ -51,6 +51,16 @@ export const verifyProof = async (req, res) => {
         const left2 = modExp(h, S, p);
         const right2 = (B * modExp(Z, C, p)) % p;
 
+        // 🔍 DEBUG LOGS ADDED HERE
+        console.log("🔍 DEBUG VERIFIER INPUTS:");
+        console.log("g^s mod p =", left1.toString());
+        console.log("a * y^c mod p =", right1.toString());
+        console.log("h^s mod p =", left2.toString());
+        console.log("b * z^c mod p =", right2.toString());
+        console.log("Match 1:", left1 === right1);
+        console.log("Match 2:", left2 === right2);
+        console.log("----------------------------------------");
+
         if (left1 === right1 && left2 === right2) {
             return res.json({ message: "✅ Login successful!" });
         } else {

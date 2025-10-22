@@ -4,12 +4,12 @@ A privacy-preserving passwordless authentication system using Zero-Knowledge Pro
 
 ---
 
-## [2.0.0] — 2025-10-19
+## [2.0.0] — 2025-10-23
 ### ✅ Stage 2 Complete: ZKP Engine (Chaum–Pedersen Protocol)
 
-> **Milestone**: Fully functional zero-knowledge passwordless login backend.
+> **Milestone**: Fully functional zero-knowledge passwordless login backend with **real 2-step challenge-response flow**.
 
-This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering a mathematically sound Chaum–Pedersen ZKP verifier, dual-key user model, and working `/api/auth/login` endpoint.
+This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering a mathematically sound Chaum–Pedersen ZKP verifier, dual-key user model, and **interactive login protocol**.
 
 ---
 
@@ -26,12 +26,12 @@ This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering
 - **Enhanced User Model**:
     - Added `publicKeyZ` field to store second public key (`z = h^x`)
     - Backward-compatible (Stage 1 users still work)
-- **ZKP Login Endpoint**:
-    - `POST /api/auth/login` — verifies user proof against stored keys
-    - Returns success/failure with clear messages
+- **Interactive ZKP Login Flow**:
+    - `POST /api/auth/challenge` — server issues random challenge `c`
+    - `POST /api/auth/verify` — verifies full proof (`a`, `b`, `c`, `s`)
 - **Integration Tests**:
     - `src/tests/registerZKPUser.test.js` — registers user with dual keys
-    - `src/tests/loginReal.test.js` — end-to-end ZKP login simulation
+    - `src/tests/loginReal.test.js` — **end-to-end 2-step ZKP login**
 
 ---
 
@@ -42,10 +42,12 @@ This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering
 - **User Registration**:
     - Now accepts optional `publicKeyZ` during registration
 - **Server Setup** (`server.js`):
+    - Added **CORS** for Chrome extension (`chrome-extension://*`)
     - Fixed module initialization order (ESM compliance)
     - Registered `/api/auth` routes correctly
-- **Dependency**:
-    - Added `node-fetch@^3.1.0` for HTTP testing in Node.js
+- **Dependencies**:
+    - Added `node-fetch@^3.1.0` for HTTP testing
+    - Added `cors` for cross-origin requests
 
 ---
 
@@ -54,7 +56,11 @@ This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering
 - ✅ Modular exponentiation handles 256-bit numbers safely
 - ✅ Chaum–Pedersen verifier passes valid proofs, rejects invalid ones
 - ✅ Users can register with **two public keys** (`y = g^x`, `z = h^x`)
-- ✅ Login endpoint **successfully verifies real ZKP proofs**
+- ✅ **Interactive ZKP flow works**:
+    1. Client sends commitment (`a`, `b`)
+    2. Server replies with challenge (`c`)
+    3. Client computes response (`s = k + c·x mod q`)
+    4. Server verifies proof → **✅ Login successful!**
 - ✅ Full flow: **Register → Store Keys → Prove → Login** (100% working)
 
 ---
@@ -70,13 +76,12 @@ npm run dev
 # 2. In a NEW terminal: Register a ZKP user
 node "src/tests/registerZKPUser.test.js"
 
-# 3. Copy the printed username (e.g., zkp_user_1760825176889)
+# 3. Update src/tests/loginReal.test.js with the new username
 
-# 4. Update src/tests/loginReal.test.js with that username
-#    (Keep the proof values from chaumPedersenVerifier.test.js)
-
-# 5. Run the login test
+# 4. Run the login test (uses real 2-step ZKP flow)
 node "src/tests/loginReal.test.js"
 
 # ✅ Expected output:
-# 🔐 LOGIN RESULT: { message: "✅ Login successful!", user: { username: "zkp_user_..." } }
+# 🔐 Starting REAL ZKP Login...
+# 📋 Challenge c = 21481897635594847035324120291172461665335799122009455272759383921815531311043
+# ✅ FINAL LOGIN RESULT: { message: "✅ Login successful!" }
