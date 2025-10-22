@@ -1,43 +1,63 @@
 // src/controllers/authController.js
 import User from '../models/User.js';
-import { verifyChaumPedersen } from '../services/chaumPedersenVerifier.js';
+import { ZKP_PARAMS } from '../config/zkpParams.js';
+import modExp from '../utils/modExp.js';
+import cryptoNode from 'crypto';
 
-export const login = async (req, res) => {
+const { p, q, g, h } = ZKP_PARAMS;
+
+// Step 1: Receive (a, b) and send challenge c
+export const getChallenge = async (req, res) => {
     try {
-        const { username, proof } = req.body;
+        const { a, b } = req.body;
 
-        // 🔍 Find user
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
+        if (!a || !b) {
+            return res.status(400).json({ error: "Missing a or b" });
         }
 
-        // 🚨 TEMP: For Stage 2, we assume proof is VALID (we'll generate it below)
-        // In Stage 3, proof comes from browser extension
+        // 🔥 Generate random challenge c ∈ [1, q-1] using Node.js crypto
+        const randomBytes = cryptoNode.randomBytes(32);
+        let c = BigInt('0x' + randomBytes.toString('hex')) % q;
+        if (c === 0n) c = 1n;
 
-        // 🔑 Get public keys
-        const y = BigInt(user.publicKey);
-        const z = BigInt(user.publicKeyZ);
+        res.json({ c: c.toString() });
+    } catch (err) {
+        console.error("Challenge error:", err);
+        return res.status(500).json({ error: "Challenge failed" });
+    }
+};
 
-        // 📦 Parse proof (convert strings to BigInt)
-        const parsedProof = {
-            a: BigInt(proof.a),
-            b: BigInt(proof.b),
-            c: BigInt(proof.c),
-            r: BigInt(proof.r)
-        };
+// Step 2: Verify full proof
+export const verifyProof = async (req, res) => {
+    try {
+        const { a, b, c, s, publicKeyY, publicKeyZ } = req.body;
 
-        // ✅ Verify ZKP
-        const isValid = verifyChaumPedersen(parsedProof, y, z);
+        if (!a || !b || !c || !s || !publicKeyY || !publicKeyZ) {
+            return res.status(400).json({ error: "Missing proof components" });
+        }
 
-        if (isValid) {
-            return res.json({ message: "✅ Login successful!", user: { username: user.username } });
+        const A = BigInt(a);
+        const B = BigInt(b);
+        const C = BigInt(c);
+        const S = BigInt(s);
+        const Y = BigInt(publicKeyY);
+        const Z = BigInt(publicKeyZ);
+
+        // 🔍 Verify: g^s == a * y^c (mod p)
+        const left1 = modExp(g, S, p);
+        const right1 = (A * modExp(Y, C, p)) % p;
+
+        // 🔍 Verify: h^s == b * z^c (mod p)
+        const left2 = modExp(h, S, p);
+        const right2 = (B * modExp(Z, C, p)) % p;
+
+        if (left1 === right1 && left2 === right2) {
+            return res.json({ message: "✅ Login successful!" });
         } else {
             return res.status(401).json({ error: "❌ Invalid proof" });
         }
-
     } catch (err) {
-        console.error("Login error:", err);
-        return res.status(500).json({ error: "Server error" });
+        console.error("Verify error:", err);
+        return res.status(500).json({ error: "Verification failed" });
     }
 };

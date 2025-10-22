@@ -1,6 +1,7 @@
 // server.js
 import express from "express";
 import dotenv from "dotenv";
+import cors from "cors"; // 🔥 Import cors
 import { connectDB } from "./src/config/db.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import authRoutes from './src/routes/authRoutes.js';
@@ -13,6 +14,15 @@ const app = express();
 
 // 🧰 Middleware
 app.use(express.json());
+
+// 🌐 Add CORS — allow requests from Chrome extension and localhost
+app.use(cors({
+    origin: [
+        'http://localhost:3000',
+        'chrome-extension://*' // ✅ Allows ALL Chrome extensions (safe for local dev)
+    ],
+    credentials: true
+}));
 
 // 🌐 Connect to MongoDB
 connectDB();
