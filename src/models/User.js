@@ -8,15 +8,15 @@ const userSchema = new mongoose.Schema({
         unique: true,
         trim: true
     },
-    // 🔑 OLD: single public key (we'll keep it for now)
-    publicKey: {
+    // y = g^x mod p
+    publicKeyY: {
         type: String,
         required: true
     },
-    // 🔑 NEW: second public key for Chaum-Pedersen
+    // z = h^x mod p
     publicKeyZ: {
         type: String,
-        required: false // optional for now (Stage 2.5)
+        required: true  // now required
     },
     createdAt: {
         type: Date,

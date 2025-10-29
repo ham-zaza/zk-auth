@@ -2,64 +2,97 @@
 import User from '../models/User.js';
 import { ZKP_PARAMS } from '../config/zkpParams.js';
 import modExp from '../utils/modExp.js';
-import cryptoNode from 'crypto';
+
+// ✅ Import crypto properly for ESM
+import { createHash } from 'crypto';
 
 const { p, q, g, h } = ZKP_PARAMS;
 
-// Step 1: Receive (a, b) and send challenge c
-export const getChallenge = async (req, res) => {
-    try {
-        const { a, b } = req.body;
+// ── 1. User Registration ───────────────────────────────
+export const registerUser = async (req, res) => {
+    console.log("✅ Register route called!");
+    console.log("Request body:", req.body);
 
-        if (!a || !b) {
-            return res.status(400).json({ error: "Missing a or b" });
+    try {
+        const { username, publicKeyY, publicKeyZ } = req.body;
+
+        if (!username || !publicKeyY) {
+            return res.status(400).json({ message: "Username and publicKeyY are required" });
         }
 
-        // 🔥 Generate random challenge c ∈ [1, q-1] using Node.js crypto
-        const randomBytes = cryptoNode.randomBytes(32);
-        let c = BigInt('0x' + randomBytes.toString('hex')) % q;
-        if (c === 0n) c = 1n;
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
+            return res.status(400).json({ message: "User already exists" });
+        }
 
-        res.json({ c: c.toString() });
-    } catch (err) {
-        console.error("Challenge error:", err);
-        return res.status(500).json({ error: "Challenge failed" });
+        const newUser = new User({ username, publicKeyY, publicKeyZ });
+        await newUser.save();
+
+        console.log("✅ User saved:", newUser);
+        res.status(201).json({ message: "User registered successfully!", user: newUser });
+
+    } catch (error) {
+        console.error("❌ Error in registerUser:", error);
+        res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
 
-// Step 2: Verify full proof
-export const verifyProof = async (req, res) => {
+// ── 2. List Users (for testing)
+export const getAllUsers = async (req, res) => {
     try {
-        const { a, b, c, s, publicKeyY, publicKeyZ } = req.body;
+        const users = await User.find().select("-__v");
+        res.status(200).json({ message: "Users fetched!", count: users.length, users });
+    } catch (error) {
+        console.error("❌ Error fetching users:", error);
+        res.status(500).json({ message: "Failed to fetch users", error: error.message });
+    }
+};
 
-        if (!a || !b || !c || !s || !publicKeyY || !publicKeyZ) {
-            return res.status(400).json({ error: "Missing proof components" });
+// ── 3. Non-Interactive ZKP Login ───────────────────────
+export const verifyProof = async (req, res) => {
+    console.log("🔍 RAW REQUEST BODY:", req.body);
+
+    const { username, a, b, s, domain, timestamp } = req.body;
+
+    if (!username || !a || !b || !s || !domain || !timestamp) {
+        return res.status(400).json({ error: "Missing proof components" });
+    }
+
+    try {
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(400).json({ error: "User not found" });
+        }
+
+        if (!user.publicKeyY || !user.publicKeyZ) {
+            return res.status(400).json({ error: "User missing public keys" });
         }
 
         const A = BigInt(a);
         const B = BigInt(b);
-        const C = BigInt(c);
         const S = BigInt(s);
-        const Y = BigInt(publicKeyY);
-        const Z = BigInt(publicKeyZ);
+        const Y = BigInt(user.publicKeyY);
+        const Z = BigInt(user.publicKeyZ);
 
-        // 🔍 Verify: g^s == a * y^c (mod p)
+        // 🔁 Compute c = H(g, h, Y, Z, A, B, domain, timestamp)
+        const hash = createHash('sha256')
+            .update(g.toString())
+            .update(h.toString())
+            .update(Y.toString())
+            .update(Z.toString())
+            .update(A.toString())
+            .update(B.toString())
+            .update(domain)
+            .update(timestamp.toString())
+            .digest();
+        const C = BigInt('0x' + hash.toString('hex')) % q;
+
+        // 🔢 Verify equations
         const left1 = modExp(g, S, p);
         const right1 = (A * modExp(Y, C, p)) % p;
 
-        // 🔍 Verify: h^s == b * z^c (mod p)
         const left2 = modExp(h, S, p);
         const right2 = (B * modExp(Z, C, p)) % p;
-
-        // 🔍 DEBUG LOGS ADDED HERE
-        console.log("🔍 DEBUG VERIFIER INPUTS:");
-        console.log("g^s mod p =", left1.toString());
-        console.log("a * y^c mod p =", right1.toString());
-        console.log("h^s mod p =", left2.toString());
-        console.log("b * z^c mod p =", right2.toString());
-        console.log("Match 1:", left1 === right1);
-        console.log("Match 2:", left2 === right2);
-        console.log("----------------------------------------");
 
         if (left1 === right1 && left2 === right2) {
             return res.json({ message: "✅ Login successful!" });
@@ -67,7 +100,7 @@ export const verifyProof = async (req, res) => {
             return res.status(401).json({ error: "❌ Invalid proof" });
         }
     } catch (err) {
-        console.error("Verify error:", err);
-        return res.status(500).json({ error: "Verification failed" });
+        console.error("💥 Verification crash:", err);
+        return res.status(500).json({ error: "Verification crashed", details: err.message });
     }
 };
