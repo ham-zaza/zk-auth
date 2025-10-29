@@ -4,84 +4,130 @@ A privacy-preserving passwordless authentication system using Zero-Knowledge Pro
 
 ---
 
-## [2.0.0] — 2025-10-23
-### ✅ Stage 2 Complete: ZKP Engine (Chaum–Pedersen Protocol)
+## [3.0.0] — 2025-10-30
+### 🔒 Stage 3 Complete: Secure, Non-Interactive ZKP Login with Chrome Extension
 
-> **Milestone**: Fully functional zero-knowledge passwordless login backend with **real 2-step challenge-response flow**.
+> **Milestone**: Fully secure, **non-interactive**, **replay-resistant**, **phishing-resistant** passwordless login via Chrome extension — **FYP-ready for Modules 1–3**.
 
-This release completes **Stage 2** of the ZK-Auth Final Year Project, delivering a mathematically sound Chaum–Pedersen ZKP verifier, dual-key user model, and **interactive login protocol**.
+This release completes **Modules 1–3** of the Final Year Project:
+- **Module 1**: Secure user registration with encrypted key storage
+- **Module 2**: Non-interactive ZKP (Fiat–Shamir) with replay/phishing protection
+- **Module 3**: Hardened Chrome extension with PIN unlock and auto-lock
 
 ---
 
 ### ✨ Added
 
-- **ZKP Core Utilities**:
-    - `src/utils/modExp.js` — secure modular exponentiation with `BigInt`
-    - Unit test: `modExp.test.js`
-- **Cryptographic Parameters**:
-    - `src/config/zkpParams.js` — safe primes (`p`, `q`) and generators (`g = 2`, `h = 3`) from RFC 5114
-- **Chaum–Pedersen Verifier**:
-    - `src/services/chaumPedersenVerifier.js` — validates ZKP proofs without secret exposure
-    - Full test suite: `chaumPedersenVerifier.test.js`
-- **Enhanced User Model**:
-    - Added `publicKeyZ` field to store second public key (`z = h^x`)
-    - Backward-compatible (Stage 1 users still work)
-- **Interactive ZKP Login Flow**:
-    - `POST /api/auth/challenge` — server issues random challenge `c`
-    - `POST /api/auth/verify` — verifies full proof (`a`, `b`, `c`, `s`)
-- **Integration Tests**:
-    - `src/tests/registerZKPUser.test.js` — registers user with dual keys
-    - `src/tests/loginReal.test.js` — **end-to-end 2-step ZKP login**
+- **Non-Interactive ZKP (Fiat–Shamir Transform)**:
+    - Removed `/api/auth/challenge` endpoint
+    - Proof now computed in **one round**: `c = H(g, h, y, z, a, b, domain, timestamp)`
+    - Backend verifies proof **without prior interaction**
+- **Replay & Phishing Protection**:
+    - Proof includes **timestamp** (5-minute window)
+    - Proof includes **domain** (`chrome-extension://...` or `http://localhost`)
+    - Backend rejects proofs with expired timestamps or invalid domains
+- **Secure Key Storage (Module 1)**:
+    - Secret key `x` is **encrypted with AES-GCM** using a **PIN-derived key**
+    - PIN → PBKDF2 (100,000 iterations) → AES-256-GCM key
+    - Only encrypted `x` stored in `chrome.storage.local`
+- **Chrome Extension Hardening (Module 3)**:
+    - **6-digit PIN setup** on first use
+    - **Auto-lock after 2 minutes** of inactivity
+    - **Unlock screen** required before login/register
+    - Secure random key generation using `crypto.getRandomValues()`
+- **New Utilities**:
+    - `src/utils/cryptoUtils.js` — AES-GCM + PBKDF2 helpers (extension-side)
+    - `content.js` — content script for future auto-login detection
+- **Updated UI**:
+    - `popup.html` — PIN setup, lock screen, login form
+    - Clear status messages for all operations
 
 ---
 
 ### 🛠 Changed
 
+- **Backend**:
+    - `authController.js`:
+        - Replaced interactive ZKP with **non-interactive verifier**
+        - Uses `import { createHash } from 'crypto'` (ESM-compliant)
+        - Validates `domain` and `timestamp` in every proof
+    - `chaumPedersenVerifier.js`:
+        - Now computes `c` from full Fiat–Shamir hash
+        - Rejects proofs outside 5-minute window
+        - Logs detailed verification steps
+    - `User.js`:
+        - Renamed `publicKey` → `publicKeyY`
+        - Made `publicKeyZ` **required**
+- **Extension**:
+    - `popup.js`:
+        - Full secure flow: PIN → key generation → registration → login
+        - Uses `chrome.runtime.getURL('')` for domain binding
+        - Sends proof in **one request** to `/api/login`
+    - `manifest.json`:
+        - Added `content_scripts` for future website integration
+        - Kept `host_permissions` for `localhost:3000`
 - **Project Structure**:
-    - Added `src/services/`, `src/tests/` directories
-- **User Registration**:
-    - Now accepts optional `publicKeyZ` during registration
-- **Server Setup** (`server.js`):
-    - Added **CORS** for Chrome extension (`chrome-extension://*`)
-    - Fixed module initialization order (ESM compliance)
-    - Registered `/api/auth` routes correctly
-- **Dependencies**:
-    - Added `node-fetch@^3.1.0` for HTTP testing
-    - Added `cors` for cross-origin requests
+    - Extension now has `src/utils/` and `src/config/` mirroring backend
+    - Shared `zkpParams.js` ensures parameter consistency
+
+---
+
+### 🚫 Removed
+
+- Interactive ZKP flow:
+    - Deleted `/api/auth/challenge` route
+    - Removed `getChallenge` controller
+- Hardcoded secret key (`x = 12345n`)
+- Plaintext storage of `secretX` in `chrome.storage.local`
 
 ---
 
 ### ✅ Verified
 
-- ✅ Modular exponentiation handles 256-bit numbers safely
-- ✅ Chaum–Pedersen verifier passes valid proofs, rejects invalid ones
-- ✅ Users can register with **two public keys** (`y = g^x`, `z = h^x`)
-- ✅ **Interactive ZKP flow works**:
-    1. Client sends commitment (`a`, `b`)
-    2. Server replies with challenge (`c`)
-    3. Client computes response (`s = k + c·x mod q`)
-    4. Server verifies proof → **✅ Login successful!**
-- ✅ Full flow: **Register → Store Keys → Prove → Login** (100% working)
+- ✅ **Registration**:
+    - User sets 6-digit PIN
+    - Generates **unique random `x`** per user
+    - Computes `y = g^x mod p`, `z = h^x mod p`
+    - Stores **encrypted `x`** in extension storage
+- ✅ **Login**:
+    - User unlocks with PIN
+    - Computes **non-interactive ZKP proof** in one step
+    - Proof includes **domain + timestamp**
+    - Backend **verifies proof** → **✅ Login successful!**
+- ✅ **Security**:
+    - ❌ **No replay**: same proof fails after 5 minutes
+    - ❌ **No phishing**: proof fails on wrong domain
+    - ❌ **No key leakage**: `x` never leaves extension in plaintext
+    - ❌ **No weak randomness**: uses `crypto.getRandomValues()`
+- ✅ **Usability**:
+    - Auto-lock after 2 minutes
+    - Clear error messages (wrong PIN, invalid proof, etc.)
+    - Works end-to-end: **Register → Unlock → Login**
 
 ---
 
-### 🧪 Demo Commands (Copy-Paste for Showcase)
+### 🧪 Demo Commands (Copy-Paste for Supervisor Showcase)
 
-> 💡 Run these in order to **reproduce your Stage 2 demo**.
+> 💡 Run these to **reproduce your FYP demo**.
 
 ```bash
-# 1. Start the backend server
-npm run dev
+# 1. Start backend
+cd "D:\Hamza uni stuff\fyp\zk-auth\phase 0"
+npm start
 
-# 2. In a NEW terminal: Register a ZKP user
-node "src/tests/registerZKPUser.test.js"
+# 2. Load extension in Chrome:
+#    - Go to chrome://extensions
+#    - Enable "Developer mode"
+#    - Click "Load unpacked" → select `zkp-auth-extension` folder
 
-# 3. Update src/tests/loginReal.test.js with the new username
+# 3. Demo Flow:
+#    a. Click extension → Set 6-digit PIN (e.g., 123456)
+#    b. Enter username (e.g., hamza_fyp)
+#    c. Click "Register" → ✅ Registered!
+#    d. Close & reopen popup → Enter PIN → Unlock
+#    e. Click "Login" → ✅ Login successful!
 
-# 4. Run the login test (uses real 2-step ZKP flow)
-node "src/tests/loginReal.test.js"
-
-# ✅ Expected output:
-# 🔐 Starting REAL ZKP Login...
-# 📋 Challenge c = 21481897635594847035324120291172461665335799122009455272759383921815531311043
-# ✅ FINAL LOGIN RESULT: { message: "✅ Login successful!" }
+# 4. Security Tests:
+#    - Wait 6 minutes → try login → ❌ "Proof timestamp expired"
+#    - Try wrong PIN → ❌ "Wrong PIN"
+#    - Check MongoDB → user has unique publicKeyY/publicKeyZ
