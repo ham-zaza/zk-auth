@@ -3,7 +3,7 @@ import User from '../models/User.js';
 import { ZKP_PARAMS } from '../config/zkpParams.js';
 import modExp from '../utils/modExp.js';
 
-// ✅ Import crypto properly for ESM
+// ✅ Import crypto for ESM
 import { createHash } from 'crypto';
 
 const { p, q, g, h } = ZKP_PARAMS;
@@ -20,42 +20,62 @@ export const registerUser = async (req, res) => {
             return res.status(400).json({ message: "Username and publicKeyY are required" });
         }
 
+        // Check if user already exists
         const existingUser = await User.findOne({ username });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists" });
         }
 
+        // Create new user in database
         const newUser = new User({ username, publicKeyY, publicKeyZ });
         await newUser.save();
 
         console.log("✅ User saved:", newUser);
-        res.status(201).json({ message: "User registered successfully!", user: newUser });
+        res.status(201).json({
+            message: "User registered successfully!",
+            user: newUser
+        });
 
     } catch (error) {
         console.error("❌ Error in registerUser:", error);
-        res.status(500).json({ message: "Internal server error", error: error.message });
+        res.status(500).json({
+            message: "Internal server error",
+            error: error.message
+        });
     }
 };
 
-// ── 2. List Users (for testing)
+// ── 2. List All Users (for testing) ────────────────────
 export const getAllUsers = async (req, res) => {
     try {
-        const users = await User.find().select("-__v");
-        res.status(200).json({ message: "Users fetched!", count: users.length, users });
+        const users = await User.find().select("-__v"); // fetch all users from MongoDB
+        res.status(200).json({
+            message: "Users fetched successfully!",
+            count: users.length,
+            users: users
+        });
     } catch (error) {
         console.error("❌ Error fetching users:", error);
-        res.status(500).json({ message: "Failed to fetch users", error: error.message });
+        res.status(500).json({
+            message: "Failed to fetch users",
+            error: error.message
+        });
     }
 };
 
 // ── 3. Non-Interactive ZKP Login ───────────────────────
 export const verifyProof = async (req, res) => {
-    console.log("🔍 RAW REQUEST BODY:", req.body);
+    console.log("🔍 RAW REQUEST BODY:", req.body); // ← ADD THIS
 
     const { username, a, b, s, domain, timestamp } = req.body;
 
+    console.log("🔍 DESTRUCTURED:", { username, a, b, s, domain, timestamp }); // ← ADD THIS
+
     if (!username || !a || !b || !s || !domain || !timestamp) {
-        return res.status(400).json({ error: "Missing proof components" });
+        return res.status(400).json({
+            error: "Missing proof components",
+            received: { username, a, b, s, domain, timestamp }
+        });
     }
 
     try {
@@ -65,7 +85,10 @@ export const verifyProof = async (req, res) => {
         }
 
         if (!user.publicKeyY || !user.publicKeyZ) {
-            return res.status(400).json({ error: "User missing public keys" });
+            return res.status(400).json({
+                error: "User missing public keys",
+                user: { publicKeyY: user.publicKeyY, publicKeyZ: user.publicKeyZ }
+            });
         }
 
         const A = BigInt(a);
@@ -74,7 +97,7 @@ export const verifyProof = async (req, res) => {
         const Y = BigInt(user.publicKeyY);
         const Z = BigInt(user.publicKeyZ);
 
-        // 🔁 Compute c = H(g, h, Y, Z, A, B, domain, timestamp)
+        // Compute c = H(g, h, Y, Z, A, B, domain, timestamp)
         const hash = createHash('sha256')
             .update(g.toString())
             .update(h.toString())
@@ -87,7 +110,7 @@ export const verifyProof = async (req, res) => {
             .digest();
         const C = BigInt('0x' + hash.toString('hex')) % q;
 
-        // 🔢 Verify equations
+        // Verify equations
         const left1 = modExp(g, S, p);
         const right1 = (A * modExp(Y, C, p)) % p;
 
